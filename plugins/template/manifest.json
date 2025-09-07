@@ -1,9 +1,9 @@
 {
-    "name": "Template Plugin",
-    "description": "A plugin for use as a template.",
+    "name": "LocalEdit",
+    "description": "A plugin to edit people message locally. resets on restart.",
     "authors": [
         {
-            "name": "You!",
+            "name": "blank",
             "id": "YOUR_ID_HERE"
         }
     ],
