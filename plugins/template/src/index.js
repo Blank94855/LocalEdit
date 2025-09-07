@@ -5,10 +5,10 @@ import { before, after } from "@vendetta/patcher";
 import { showInputAlert } from "@vendetta/ui/alerts";
 
 // Store for local message edits (resets on app restart)
-const messageEdits: { [messageId: string]: string } = {};
+const messageEdits = {};
 
-let unpatchRender: (() => void) | null = null;
-let unpatchContextMenu: (() => void) | null = null;
+let unpatchRender = null;
+let unpatchContextMenu = null;
 
 export default {
     onLoad: () => {
@@ -45,7 +45,7 @@ export default {
                     const [event, menuComponent] = args;
                     
                     // Wrap the original menu component
-                    args[1] = (props: any) => {
+                    args[1] = (props) => {
                         const originalMenu = menuComponent(props);
                         const message = props?.message;
                         
@@ -62,6 +62,107 @@ export default {
                                         title: "Edit Message Locally",
                                         placeholder: "Enter new message content...",
                                         initialValue: currentEdit,
+                                        confirmText: "Save",
+                                        onConfirm: (newContent) => {
+                                            if (newContent.trim() === "") {
+                                                delete messageEdits[message.id];
+                                                logger.info(`Removed local edit for message ${message.id}`);
+                                            } else {
+                                                messageEdits[message.id] = newContent;
+                                                logger.info(`Locally edited message ${message.id}`);
+                                            }
+                                            
+                                            // Force UI update
+                                            try {
+                                                ReactNative.InteractionManager?.runAfterInteractions?.(() => {
+                                                    // Trigger re-render
+                                                });
+                                            } catch (e) {
+                                                // Fallback - just log
+                                                logger.info("Edit saved, may need to scroll to see changes");
+                                            }
+                                        }
+                                    });
+                                }
+                            };
+
+                            // Add remove edit option if message is currently edited
+                            const removeButton = messageEdits[message.id] ? {
+                                id: "remove-local-edit",
+                                label: "Remove Local Edit",
+                                icon: findByName("TrashIcon"),
+                                destructive: true,
+                                action: () => {
+                                    delete messageEdits[message.id];
+                                    logger.info(`Removed local edit for message ${message.id}`);
+                                }
+                            } : null;
+
+                            // Add our buttons to the menu
+                            if (originalMenu?.props?.children) {
+                                const children = Array.isArray(originalMenu.props.children) 
+                                    ? originalMenu.props.children 
+                                    : [originalMenu.props.children];
+                                
+                                children.push(editButton);
+                                if (removeButton) {
+                                    children.push(removeButton);
+                                }
+                                
+                                originalMenu.props.children = children;
+                            }
+                        }
+                        
+                        return originalMenu;
+                    };
+                });
+            }
+
+            // Register debug functions globally (optional)
+            global.showLocalEdits = () => {
+                const editCount = Object.keys(messageEdits).length;
+                logger.info(`Currently have ${editCount} local message edits`);
+                console.log(messageEdits);
+                return messageEdits;
+            };
+
+            global.clearAllEdits = () => {
+                Object.keys(messageEdits).forEach(key => delete messageEdits[key]);
+                logger.info("Cleared all local message edits");
+            };
+
+            logger.info("Local message editor loaded successfully!");
+            logger.info("Long-press any message to see edit options");
+
+        } catch (error) {
+            logger.error("Failed to setup message editor:", error);
+        }
+    },
+    
+    onUnload: () => {
+        logger.info("Local Message Editor plugin unloaded");
+        
+        // Clean up patches
+        if (unpatchRender) {
+            unpatchRender();
+            unpatchRender = null;
+        }
+        
+        if (unpatchContextMenu) {
+            unpatchContextMenu();
+            unpatchContextMenu = null;
+        }
+        
+        // Clean up global functions
+        delete global.showLocalEdits;
+        delete global.clearAllEdits;
+        
+        // Clear stored edits
+        Object.keys(messageEdits).forEach(key => delete messageEdits[key]);
+        
+        logger.info("Message edits cleared and patches removed");
+    },
+};                                        initialValue: currentEdit,
                                         confirmText: "Save",
                                         onConfirm: (newContent: string) => {
                                             if (newContent.trim() === "") {
